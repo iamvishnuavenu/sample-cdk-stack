@@ -1,14 +1,13 @@
 import * as cdk from '@aws-cdk/core';
-import { SampleAppProps, SampleAppStack } from '../lib/sample-app';
+import { SampleAppProps, SampleApp } from '../lib/sample-app';
 
 export class ProdSampleAppStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
   
-    var serviceProps:SampleAppProps = {
-        org:'sc', 
-        dgn:'beta', 
-        instanceType: 'micro', 
+    var envProps:SampleAppProps = {
+        dgn:'prod', 
+        instanceType: 'medium', 
         ami: "<AMI NAME>",
         vpcId: "vpc-<SOMETHING>",
         minCapacity: 2,
@@ -18,22 +17,25 @@ export class ProdSampleAppStack extends cdk.Stack {
           'DEPLOYMENT_GROUP_NAME': "production"
         },
         subnetForASG: {
-          "subnet-afdb45c7" : 'ap-south-1a',
-          "subnet-2a7ab566" : 'ap-south-1b'
+          "subnet-<id1>" : 'ap-south-1a',
+          "subnet-<id2>" : 'ap-south-1b'
         },
         subnetForALB: {
-          "subnet-89f837c5": 'ap-south-1b',
-          "subnet-95d846fd": 'ap-south-1a'
+          "subnet-<id1>": 'ap-south-1b',
+          "subnet-<id2>": 'ap-south-1a'
         },
         isPublicALB: true,
         securityGroups:[
           {id: '<ADD HERE OTHER SECURITY ID>', port: 9100,description: 'Node Exporter' }, // Keeping it empty its also works
         ],
         albCertArn: 'arn:aws:acm:ap-south-1:<ACC_ID>:certificate/<CERT_ID>',
-  
+        zoneName: 'example.com',
+        hostZoneId: '<host id>',
+        recordName: 'app' // app.example.com
+
     }
 
-    // The code that defines your stack goes here
-    new SampleAppStack(this, "SampleApp", serviceProps); // need to fill the props
+    // Initialization of SampleApp construct
+    new SampleApp(this, "SampleApp", envProps); // need to fill the props
   }
 }

@@ -9,8 +9,8 @@ import * as route53 from '@aws-cdk/aws-route53';
 import * as route53targets from '@aws-cdk/aws-route53-targets';
 
 
-function composeResourceName(org: string, dgn: string, part: string):string{
-  return `${org}-${dgn}-${part}`
+function composeResourceName(dgn: string, part: string):string{
+  return `${dgn}-${part}`
 }
 
 function generateRandomId(){
@@ -24,9 +24,7 @@ function injectTags(tags: any, resource: Construct ){
   }
 }
 
-
 export interface SampleAppProps {
-  org?:string,
   dgn?:string,
   instanceType?:string; // micro, medium, large
   ami?:string; 
@@ -39,32 +37,30 @@ export interface SampleAppProps {
   subnetForALB: {},
   isPublicALB: boolean,
   securityGroups:{id:string, port: number, description: string}[],
-  albCertArn: string
+  albCertArn: string,
+  hostZoneId: string,
+  zoneName: string,
+  recordName: string
 }
 
 
-export class SampleAppStack extends Construct {
+export class SampleApp extends Construct {
   private readonly asg: autoscaling.AutoScalingGroup; 
   private readonly vpc: ec2.IVpc;
   public readonly alb: elbv2.ApplicationLoadBalancer;
   private readonly albSecurityGroup: ec2.SecurityGroup;
   private readonly listener: elbv2.IApplicationListener;
   private readonly asgSecurityGroup: ec2.SecurityGroup;
-//   private readonly targetGroup: elbv2.ApplicationTargetGroup
 
   constructor(scope: Construct, id: string, props: SampleAppProps){
       super(scope, id);
 
-      var giveId = composeResourceName.bind(null, props.org||"sc", props.dgn||"dev");
+      var giveId = composeResourceName.bind(null, props.dgn||"dev");
  
       // Importing VPC
       this.vpc = ec2.Vpc.fromLookup(this, "existingVPC", { vpcId: props.vpcId})
       const cert = acm.Certificate.fromCertificateArn(this, 'certficate',props.albCertArn)
  
-
-
-
-
 
       // Creating Security Groups for ASG and ALB
 
@@ -74,19 +70,19 @@ export class SampleAppStack extends Construct {
       this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'Access Server');
 
 
-
       this.asgSecurityGroup = new ec2.SecurityGroup(this, giveId(`${id}-asg-sg`), { 
                                   vpc: this.vpc,
                                   description: `Security Group for ${giveId(id)}` });
                                     
       this.asgSecurityGroup.addIngressRule(this.albSecurityGroup, ec2.Port.tcp(8999), "Access From LoadBalancer");
+
       props.securityGroups.forEach(rule => {
           let sg = ec2.SecurityGroup.fromSecurityGroupId(this, generateRandomId(), rule.id, {
               mutable: false
            });
           this.asgSecurityGroup.addIngressRule(sg, ec2.Port.tcp(rule.port), rule.description)
       })
-      
+
       // Setting Up ALB 
       this.alb = new elbv2.ApplicationLoadBalancer(this, 
               giveId(`${id}-alb`), {
@@ -98,6 +94,7 @@ export class SampleAppStack extends Construct {
               });
       
       Tags.of(this.alb).add("Name", giveId(`${id}-alb`));
+      
       this.listener = this.alb.addListener(giveId(`${id}-listener`), {
          port: 443,
          open: true,
@@ -105,7 +102,6 @@ export class SampleAppStack extends Construct {
          certificates: [cert]
       });
      
-
       // Setting up ASG
       const asgSubnets: SubnetSelection = this.getSelectedSubnets(props.subnetForASG);
 
@@ -134,23 +130,22 @@ export class SampleAppStack extends Construct {
           }
       })
       
-      this.listener.connections.allowFrom(this.alb, ec2.Port.tcp(80))
-
+    this.listener.connections.allowFrom(this.alb, ec2.Port.tcp(80))
 
     // Setting up Route53 entry
-    const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'ExistedHostedZone', {
-        hostedZoneId: '',
-        zoneName: ''
+    const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'existedHostedZone', {
+        hostedZoneId: props.hostZoneId,
+        zoneName: props.zoneName
      })
 
     new route53.AaaaRecord(this, 'AliasRecord', {
         zone: zone,
-        recordName: 'sample-app',
-        target: route53.RecordTarget.fromAlias(new route53targets.ClassicLoadBalancerTarget(this.alb)) // need to fix this !
+        recordName: props.recordName,
+        target: route53.RecordTarget.fromAlias(new route53targets.LoadBalancerTarget(this.alb))
     })
-      
-  }
+    }
 
+  // Enum should be used to avoid mistype of :type argument, which will always result in "micro" instance
   getInstanceType(type: string){
       switch(type){
           case "micro":
@@ -165,32 +160,28 @@ export class SampleAppStack extends Construct {
   }
 
   getMachineImage(amiName: string){
-      // return new ec2.LookupMachineImage({ name: amiName});
       return new ec2.LookupMachineImage({ name: amiName});
   }
 
 
   getSelectedSubnets(listOfSubnets: any ):SubnetSelection {
-
       const asgSubnets: SubnetSelection = { subnets: []}
       for ( let key in listOfSubnets ){
             let value = listOfSubnets[key];
             let subnet = ec2.Subnet.fromSubnetAttributes(this,`'subnetid-'${generateRandomId()}`, { subnetId:key, availabilityZone: value});
             asgSubnets.subnets?.push(subnet)
-
       }
-
       return asgSubnets
   }
 
   getRole(env: string){
       switch(env){
           case "dev":
-              return iam.Role.fromRoleArn(this, 'microsite-role',"arn:aws:iam::<ACC_ID>:role/<DEV_ROLE_NAME>" )
-          case "beta":
-              return iam.Role.fromRoleArn(this, 'microsite-role',"arn:aws:iam::<ACC_ID>:role/<BETA_ROLE_NAME>" )
+              return iam.Role.fromRoleArn(this, 'sample-app-role',"arn:aws:iam::<ACC_ID>:role/<DEV_ROLE_NAME>" )
+          case "prod":
+              return iam.Role.fromRoleArn(this, 'sample-app-role',"arn:aws:iam::<ACC_ID>:role/<PROD_ROLE_NAME>" )
           default:
-              return iam.Role.fromRoleArn(this, 'microsite-role',"arn:aws:iam::<ACC_ID>:role/<DEV_ROLE_NAME>" )
+              return iam.Role.fromRoleArn(this, 'sample-app-role',"arn:aws:iam::<ACC_ID>:role/<DEV_ROLE_NAME>" )
       }
   }
 
@@ -206,7 +197,6 @@ export class SampleAppStack extends Construct {
               return "ssh-dev"
       }
   }
-
 }
 
 
