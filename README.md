@@ -1,19 +1,19 @@
-# Sample app stack
+# Sample app stack with CDK
 
 A Sample code to deploy multi-resource stack on AWS using AWS CDK.
 This tutorial is the follow up material of my blog on AWS CDK. The code is not complete and nowhere near ready for the production.
 The main intent of this tutorial is get started with AWS CDK, which in my opinion is really nice tool have in our DevOps Toolkit.
 
 
-## Good Article to setup Profile:
-https://docs.aws.amazon.com/sdk-for-php/v3/developer-guide/guide_credentials_profiles.html
+### Good Article to setup Profile:
+> https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html
 
 
-## Setting up the AWS CDK on local system
-https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html
+### Setting up the AWS CDK on local system
+> https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html
 
 
-## Command 
+### Command 
 ```
 # build the application
 $ npm run build
